@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/Richard/WebstormProjects/7* -name ModInfo.xml -o -name *.csproj)",
+      "Bash(find /c/Users/Richard/WebstormProjects/7* -name Resources -o -name UIAtlases)"
+    ]
+  }
+}

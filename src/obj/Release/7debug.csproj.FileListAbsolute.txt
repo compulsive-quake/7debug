@@ -1,0 +1,9 @@
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.csproj.AssemblyReference.cache
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.AssemblyInfoInputs.cache
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.AssemblyInfo.cs
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.csproj.CoreCompileInputs.cache
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.dll
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.pdb
+C:\Users\Richard\WebstormProjects\7debug\7debug.dll
+C:\Users\Richard\WebstormProjects\7debug\7debug.pdb
