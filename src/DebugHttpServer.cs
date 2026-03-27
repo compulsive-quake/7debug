@@ -139,6 +139,12 @@ namespace SevenDebug
                     case "/api/entities":
                         result = HandleEntities();
                         break;
+                    case "/api/saves":
+                        result = HandleSaves();
+                        break;
+                    case "/api/loadgame":
+                        result = HandleLoadGame(request);
+                        break;
                     default:
                         response.StatusCode = 404;
                         result = Json("error", "Not found. GET / for available endpoints.");
@@ -171,6 +177,8 @@ namespace SevenDebug
     ""GET /api/console"":     ""Recent console log output"",
     ""GET /api/screenshot"":  ""Capture and return a PNG screenshot"",
     ""POST /api/command"":    ""Execute a console command (body: {\""command\"": \""cmd\""})"",
+    ""GET /api/saves"":       ""List saved games sorted by most recent"",
+    ""POST /api/loadgame"":   ""Load a saved game (body: {\""world\"": \""name\"", \""game\"": \""name\""} or empty for most recent)""
   }
 }";
         }
@@ -216,34 +224,17 @@ namespace SevenDebug
 
             Log.Out($"[7debug] Executing command: {cmd}");
 
-            // Capture output
-            var output = new List<string>();
-
-            void LogHandler(string msg, string stack, LogType type)
-            {
-                output.Add(msg);
-            }
-
-            Application.logMessageReceived += LogHandler;
-
-            try
-            {
-                // Execute via the console command system
-                SdtdConsole.Instance.ExecuteSync(cmd, null);
-            }
-            finally
-            {
-                Application.logMessageReceived -= LogHandler;
-            }
+            var capture = new CaptureConsoleConnection();
+            SdtdConsole.Instance.ExecuteAsync(cmd, capture);
 
             var sb = new StringBuilder();
             sb.Append("{\"command\":");
             sb.Append(JsonString(cmd));
             sb.Append(",\"output\":[");
-            for (int i = 0; i < output.Count; i++)
+            for (int i = 0; i < capture.Lines.Count; i++)
             {
                 if (i > 0) sb.Append(",");
-                sb.Append(JsonString(output[i]));
+                sb.Append(JsonString(capture.Lines[i]));
             }
             sb.Append("]}");
             return sb.ToString();
@@ -425,6 +416,128 @@ namespace SevenDebug
                 response.StatusCode = 504;
                 SendJson(response, Json("error", "Screenshot capture timed out"));
             }
+        }
+
+        // ── Saves / Load Game ──────────────────────────────────────
+
+        private struct SaveEntry
+        {
+            public string World;
+            public string Game;
+            public DateTime LastModified;
+        }
+
+        private List<SaveEntry> GetSaveEntries()
+        {
+            var entries = new List<SaveEntry>();
+            var saveRoot = GameIO.GetSaveGameRootDir();
+            if (!Directory.Exists(saveRoot)) return entries;
+
+            foreach (var worldDir in Directory.GetDirectories(saveRoot))
+            {
+                var worldName = Path.GetFileName(worldDir);
+                foreach (var gameDir in Directory.GetDirectories(worldDir))
+                {
+                    var gameName = Path.GetFileName(gameDir);
+                    var lastMod = Directory.GetLastWriteTime(gameDir);
+                    entries.Add(new SaveEntry { World = worldName, Game = gameName, LastModified = lastMod });
+                }
+            }
+
+            entries.Sort((a, b) => b.LastModified.CompareTo(a.LastModified));
+            return entries;
+        }
+
+        private string HandleSaves()
+        {
+            var entries = GetSaveEntries();
+            var sb = new StringBuilder();
+            sb.Append("{\"saves\":[");
+            for (int i = 0; i < entries.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                var e = entries[i];
+                sb.Append("{\"world\":");
+                sb.Append(JsonString(e.World));
+                sb.Append(",\"game\":");
+                sb.Append(JsonString(e.Game));
+                sb.Append(",\"lastModified\":");
+                sb.Append(JsonString(e.LastModified.ToString("yyyy-MM-dd HH:mm:ss")));
+                sb.Append("}");
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
+        private string HandleLoadGame(HttpListenerRequest request)
+        {
+            if (request.HttpMethod != "POST")
+                return Json("error", "Use POST. Body: {\"world\": \"name\", \"game\": \"name\"} or empty for most recent");
+
+            if (GameManager.Instance?.World != null)
+                return Json("error", "Already in a game. Exit to main menu first.");
+
+            string body;
+            using (var reader = new StreamReader(request.InputStream, request.ContentEncoding))
+                body = reader.ReadToEnd();
+
+            string worldName = null;
+            string gameName = null;
+
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                worldName = ExtractJsonString(body, "world");
+                gameName = ExtractJsonString(body, "game");
+            }
+
+            // If no world/game specified, pick the most recent save
+            if (string.IsNullOrEmpty(worldName) || string.IsNullOrEmpty(gameName))
+            {
+                var entries = GetSaveEntries();
+                if (entries.Count == 0)
+                    return Json("error", "No saved games found");
+
+                worldName = entries[0].World;
+                gameName = entries[0].Game;
+            }
+
+            // Verify save exists
+            var saveDir = Path.Combine(GameIO.GetSaveGameRootDir(), worldName, gameName);
+            if (!Directory.Exists(saveDir))
+                return Json("error", $"Save not found: {worldName}/{gameName}");
+
+            Log.Out($"[7debug] Loading game: {worldName}/{gameName}");
+
+            // Set game prefs and start on the main thread
+            _screenshotHelper.GetComponent<ScreenshotCapture>().QueueMainThreadAction(() =>
+            {
+                try
+                {
+                    Log.Out($"[7debug] Setting GameWorld={worldName}, GameName={gameName}");
+                    GamePrefs.Set(EnumGamePrefs.GameWorld, worldName);
+                    GamePrefs.Set(EnumGamePrefs.GameName, gameName);
+                    // Set GameMode to survival SP
+                    GamePrefs.Set(EnumGamePrefs.GameMode, "GameModeSurvivalSP");
+
+                    var gm = GameManager.Instance;
+                    Log.Out($"[7debug] GameManager.Instance is {(gm == null ? "null" : "valid")}, World is {(gm?.World == null ? "null" : "set")}");
+                    Log.Out($"[7debug] Calling StartGame...");
+                    gm.StartGame(true);
+                    Log.Out("[7debug] StartGame returned");
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"[7debug] LoadGame failed: {ex}");
+                }
+            });
+
+            var sb = new StringBuilder();
+            sb.Append("{\"status\":\"loading\",\"world\":");
+            sb.Append(JsonString(worldName));
+            sb.Append(",\"game\":");
+            sb.Append(JsonString(gameName));
+            sb.Append("}");
+            return sb.ToString();
         }
 
         // ── Helpers ────────────────────────────────────────────────

@@ -2,7 +2,29 @@
   "permissions": {
     "allow": [
       "Bash(find /c/Users/Richard/WebstormProjects/7* -name ModInfo.xml -o -name *.csproj)",
-      "Bash(find /c/Users/Richard/WebstormProjects/7* -name Resources -o -name UIAtlases)"
+      "Bash(find /c/Users/Richard/WebstormProjects/7* -name Resources -o -name UIAtlases)",
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"Start-Process 'steam://rungameid/251570'\")",
+      "Bash(powershell -Command \"Start-Process 'D:\\\\SteamLibrary\\\\steamapps\\\\common\\\\7 Days To Die\\\\7DaysToDie.exe'\")",
+      "Bash(taskkill //F //IM 7DaysToDie.exe)",
+      "Bash(taskkill //F //IM 7DaysToDie_EAC.exe)",
+      "Bash(powershell -Command \"Stop-Process -Name '7DaysToDie' -Force -ErrorAction SilentlyContinue; Stop-Process -Name '7DaysToDie_EAC' -Force -ErrorAction SilentlyContinue; Write-Output 'Done'\")",
+      "Bash(cat \"D:/SteamLibrary/steamapps/common/7 Days To Die/Launcher/\"*)",
+      "Bash(find 'D:/SteamLibrary/steamapps/common/7 Days To Die' -type f \\\\\\(-name *.vdf -o -name *.ini -o -name *.cfg -o -name *launcher* -o -name *EAC* \\\\\\))",
+      "Bash(find 'D:/SteamLibrary/steamapps/common/7 Days To Die' -type f -name *.json -o -name *launch*)",
+      "Bash(grep -E \"\\\\.exe$|\\\\.cfg$|\\\\.ini$|\\\\.vdf$\")",
+      "Bash(grep -r launch 'D:/SteamLibrary/steamapps/common/7 Days To Die/' --include=*.xml --include=*.json --include=*.vdf --include=*.cfg --include=*.ini)",
+      "Bash(grep -r \"EAC\\\\|eac\" 'D:/SteamLibrary/steamapps/common/7 Days To Die/' --include=*.xml --include=*.json --include=*.vdf --include=*.cfg --include=*.ini)",
+      "Bash(wmic datafile:*)",
+      "Bash(find 'D:/SteamLibrary/steamapps/common/7 Days To Die' -maxdepth 1 -type f -exec file {})",
+      "Bash(2)",
+      "Bash(find D:/SteamLibrary -maxdepth 3 -type f \\\\\\(-name *.vdf -o -name *.acf \\\\\\))",
+      "Bash(grep -r \"7dLauncher\\\\|7DaysToDie_EAC\\\\|disable.eac\" 'D:/SteamLibrary/steamapps/common/7 Days To Die/' --include=*.json --include=*.xml)",
+      "WebSearch",
+      "WebFetch(domain:steamdb.info)",
+      "WebFetch(domain:steamcommunity.com)",
+      "Bash(powershell -Command \"& { \\\\$steamPath = \\(Get-ItemProperty -Path 'HKLM:\\\\SOFTWARE\\\\WOW6432Node\\\\Valve\\\\Steam' -Name InstallPath -ErrorAction SilentlyContinue\\).InstallPath; Write-Output \\\\$steamPath }\")",
+      "Bash(powershell -Command \"Start-Process -FilePath 'D:\\\\SteamLibrary\\\\steamapps\\\\common\\\\7 Days To Die\\\\7DaysToDie.exe' -WorkingDirectory 'D:\\\\SteamLibrary\\\\steamapps\\\\common\\\\7 Days To Die'\")"
     ]
   }
 }
