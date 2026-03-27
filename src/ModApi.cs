@@ -18,6 +18,8 @@ namespace SevenDebug
 
             Log.Out("[7debug] Initializing...");
 
+            LogCapture.EnsureRegistered();
+
             var harmony = new Harmony("com.richard.7debug");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
 

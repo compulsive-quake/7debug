@@ -21,7 +21,8 @@ Or use `build.ps1` / `build.sh`.
 - `src/DebugHttpServer.cs` — HTTP listener with all API endpoints
 - `src/ScreenshotCapture.cs` — MonoBehaviour for main-thread screenshot capture
 - `src/ScreenshotRequest.cs` — thread-safe request object for screenshot queue
-- `src/LogCapture.cs` — ring buffer capturing Unity log messages + Harmony patch
+- `src/LogCapture.cs` — ring buffer capturing game log messages via `Log.LogCallbacks`
+- `src/CaptureConsoleConnection.cs` — `IConsoleConnection` impl for capturing command output
 
 ## HTTP API (port 7860)
 - `GET /` — lists all endpoints
@@ -33,10 +34,17 @@ Or use `build.ps1` / `build.sh`.
 - `GET /api/console` — last 100 log messages (errors include stack traces)
 - `GET /api/screenshot` — returns a PNG screenshot of the current frame
 - `POST /api/command` — execute a console command, body: `{"command": "cmd"}`
+- `GET /api/saves` — list saved games sorted by most recent
+- `POST /api/loadgame` — load a save, body: `{"world": "name", "game": "name"}` or empty for most recent
 
 ## Key design decisions
 - Uses `System.Net.HttpListener` (no external dependencies)
 - Screenshots are queued from the HTTP thread and captured on Unity's main thread via a MonoBehaviour coroutine (required because `ReadPixels` must run on main thread)
 - Falls back to localhost-only binding if all-interfaces binding fails (admin privileges)
 - CORS enabled for browser-based tool access
-- Log capture uses a 500-entry ring buffer with a Harmony patch on `GameManager.Awake`
+- Log capture uses `Log.LogCallbacks` (7DTD's LogLibrary), not Unity's `Application.logMessageReceived`
+- Command output captured via `IConsoleConnection` implementation, not log interception
+- Main-thread dispatch queue on ScreenshotCapture for operations like `StartGame` that must run on Unity's main thread
+
+## Skills
+- `/try7` — launches the game, waits for 7debug to come online, and loads the most recent save

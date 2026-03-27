@@ -27,7 +27,7 @@ namespace SevenDebug
         {
             if (_registered) return;
             _registered = true;
-            Application.logMessageReceived += OnLogMessage;
+            Log.LogCallbacks += OnLogMessage;
         }
 
         private static void OnLogMessage(string message, string stackTrace, LogType type)

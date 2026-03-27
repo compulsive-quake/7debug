@@ -7,3 +7,4 @@ C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.dll
 C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.pdb
 C:\Users\Richard\WebstormProjects\7debug\7debug.dll
 C:\Users\Richard\WebstormProjects\7debug\7debug.pdb
+C:\Users\Richard\WebstormProjects\7debug\src\obj\Release\7debug.sourcelink.json

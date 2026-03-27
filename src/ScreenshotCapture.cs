@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Concurrent;
 using UnityEngine;
@@ -6,17 +7,36 @@ namespace SevenDebug
 {
     /// <summary>
     /// MonoBehaviour that runs on the main thread to capture screenshots
-    /// when requested by the HTTP server.
+    /// and execute queued actions when requested by the HTTP server.
     /// </summary>
     public class ScreenshotCapture : MonoBehaviour
     {
         public ConcurrentQueue<ScreenshotRequest> RequestQueue { get; set; }
+
+        private readonly ConcurrentQueue<Action> _mainThreadActions = new ConcurrentQueue<Action>();
+
+        public void QueueMainThreadAction(Action action)
+        {
+            _mainThreadActions.Enqueue(action);
+        }
 
         private void Update()
         {
             if (RequestQueue != null && RequestQueue.TryDequeue(out var req))
             {
                 StartCoroutine(CaptureScreenshot(req));
+            }
+
+            while (_mainThreadActions.TryDequeue(out var action))
+            {
+                try
+                {
+                    action();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"[7debug] Main thread action failed: {ex.Message}");
+                }
             }
         }
 
@@ -38,7 +58,7 @@ namespace SevenDebug
 
                 Log.Out($"[7debug] Screenshot captured: {width}x{height}, {req.PngData.Length} bytes");
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
                 Log.Error($"[7debug] Screenshot failed: {ex.Message}");
                 req.PngData = null;
