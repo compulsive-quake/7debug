@@ -1,0 +1,7 @@
+# Build outputs
+*.dll
+*.pdb
+
+# MSBuild artifacts
+src/obj/
+src/bin/
