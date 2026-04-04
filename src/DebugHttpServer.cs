@@ -145,6 +145,9 @@ namespace SevenDebug
                     case "/api/loadgame":
                         result = HandleLoadGame(request);
                         break;
+                    case "/api/quit":
+                        result = HandleQuit(request);
+                        break;
                     default:
                         response.StatusCode = 404;
                         result = Json("error", "Not found. GET / for available endpoints.");
@@ -178,7 +181,8 @@ namespace SevenDebug
     ""GET /api/screenshot"":  ""Capture and return a PNG screenshot"",
     ""POST /api/command"":    ""Execute a console command (body: {\""command\"": \""cmd\""})"",
     ""GET /api/saves"":       ""List saved games sorted by most recent"",
-    ""POST /api/loadgame"":   ""Load a saved game (body: {\""world\"": \""name\"", \""game\"": \""name\""} or empty for most recent)""
+    ""POST /api/loadgame"":   ""Load a saved game (body: {\""world\"": \""name\"", \""game\"": \""name\""} or empty for most recent)"",
+    ""POST /api/quit"":       ""Gracefully quit the game""
   }
 }";
         }
@@ -538,6 +542,29 @@ namespace SevenDebug
             sb.Append(JsonString(gameName));
             sb.Append("}");
             return sb.ToString();
+        }
+
+        private string HandleQuit(HttpListenerRequest request)
+        {
+            if (request.HttpMethod != "POST")
+                return Json("error", "Use POST with empty body to quit the game gracefully.");
+
+            Log.Out("[7debug] Graceful quit requested via API");
+
+            _screenshotHelper.GetComponent<ScreenshotCapture>().QueueMainThreadAction(() =>
+            {
+                try
+                {
+                    Log.Out("[7debug] Quitting game gracefully...");
+                    Application.Quit();
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"[7debug] Quit failed: {ex}");
+                }
+            });
+
+            return "{\"status\":\"quitting\"}";
         }
 
         // ── Helpers ────────────────────────────────────────────────

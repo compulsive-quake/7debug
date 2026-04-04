@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\Richard\\WebstormProjects\\7debug\\src\\7debug.csproj": {}
+    "C:\\Users\\Richard\\WebstormProjects\\7days\\7debug\\src\\7debug.csproj": {}
   },
   "projects": {
-    "C:\\Users\\Richard\\WebstormProjects\\7debug\\src\\7debug.csproj": {
+    "C:\\Users\\Richard\\WebstormProjects\\7days\\7debug\\src\\7debug.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\Richard\\WebstormProjects\\7debug\\src\\7debug.csproj",
+        "projectUniqueName": "C:\\Users\\Richard\\WebstormProjects\\7days\\7debug\\src\\7debug.csproj",
         "projectName": "7debug",
-        "projectPath": "C:\\Users\\Richard\\WebstormProjects\\7debug\\src\\7debug.csproj",
+        "projectPath": "C:\\Users\\Richard\\WebstormProjects\\7days\\7debug\\src\\7debug.csproj",
         "packagesPath": "C:\\Users\\Richard\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\Richard\\WebstormProjects\\7debug\\src\\obj\\",
+        "outputPath": "C:\\Users\\Richard\\WebstormProjects\\7days\\7debug\\src\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"

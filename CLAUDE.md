@@ -36,6 +36,7 @@ Or use `build.ps1` / `build.sh`.
 - `POST /api/command` — execute a console command, body: `{"command": "cmd"}`
 - `GET /api/saves` — list saved games sorted by most recent
 - `POST /api/loadgame` — load a save, body: `{"world": "name", "game": "name"}` or empty for most recent
+- `POST /api/quit` — gracefully quit the game (empty body)
 
 ## Key design decisions
 - Uses `System.Net.HttpListener` (no external dependencies)
