@@ -23,12 +23,13 @@ namespace SevenDebug
             var harmony = new Harmony("com.richard.7debug");
             harmony.PatchAll(Assembly.GetExecutingAssembly());
 
-            _server = new DebugHttpServer(port: 7860);
+            int port = GameManager.IsDedicatedServer ? 7861 : 7860;
+            _server = new DebugHttpServer(port: port);
             _server.Start();
 
             ModEvents.GameShutdown.RegisterHandler(OnGameShutdown);
 
-            Log.Out("[7debug] HTTP debug server started on port 7860");
+            Log.Out("[7debug] HTTP debug server started on port {0}", port);
         }
 
         private void OnGameShutdown(ref ModEvents.SGameShutdownData data)
