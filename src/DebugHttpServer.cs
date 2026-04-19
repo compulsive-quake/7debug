@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -186,7 +187,7 @@ namespace SevenDebug
     ""GET /api/saves"":       ""List saved games sorted by most recent"",
     ""POST /api/loadgame"":   ""Load a saved game (body: {\""world\"": \""name\"", \""game\"": \""name\""} or empty for most recent)"",
     ""POST /api/reloadgame"": ""Exit current game and reload it (picks up XML changes)"",
-    ""POST /api/quit"":       ""Gracefully quit the game""
+    ""POST /api/quit"":       ""Save the world, wait for the save queue to drain, then quit""
   }
 }";
         }
@@ -611,22 +612,47 @@ namespace SevenDebug
             if (request.HttpMethod != "POST")
                 return Json("error", "Use POST with empty body to quit the game gracefully.");
 
-            Log.Out("[7debug] Graceful quit requested via API");
+            Log.Out("[7debug] Graceful quit requested via API — saving world first");
 
-            _screenshotHelper.GetComponent<ScreenshotCapture>().QueueMainThreadAction(() =>
+            var capture = _screenshotHelper.GetComponent<ScreenshotCapture>();
+            capture.QueueMainThreadAction(() => capture.StartCoroutine(SaveAndQuitCoroutine()));
+
+            return "{\"status\":\"saving-and-quitting\"}";
+        }
+
+        // Region files get corrupted when the process dies mid-write. Save first,
+        // let the background save thread flush chunks/regions/player data, THEN exit.
+        private static IEnumerator SaveAndQuitCoroutine()
+        {
+            if (GameManager.Instance?.World == null)
             {
-                try
-                {
-                    Log.Out("[7debug] Quitting game gracefully...");
-                    Application.Quit();
-                }
-                catch (Exception ex)
-                {
-                    Log.Error($"[7debug] Quit failed: {ex}");
-                }
-            });
+                Log.Out("[7debug] No world loaded — quitting immediately");
+                Application.Quit();
+                yield break;
+            }
 
-            return "{\"status\":\"quitting\"}";
+            bool isDedi = GameManager.IsDedicatedServer;
+
+            Log.Out("[7debug] Running saveworld...");
+            SdtdConsole.Instance.ExecuteAsync("saveworld", new CaptureConsoleConnection());
+
+            // saveworld enqueues chunk/region writes on a background thread.
+            // Give it time to drain — a busy world can take several seconds.
+            const float saveDrainSeconds = 6f;
+            Log.Out($"[7debug] Waiting {saveDrainSeconds}s for save queue to drain...");
+            yield return new WaitForSeconds(saveDrainSeconds);
+
+            if (isDedi)
+            {
+                // On a dedicated server, 'shutdown' runs the game's own save+cleanup+exit.
+                Log.Out("[7debug] Running shutdown command (dedicated server)...");
+                SdtdConsole.Instance.ExecuteAsync("shutdown", new CaptureConsoleConnection());
+            }
+            else
+            {
+                Log.Out("[7debug] Quitting...");
+                Application.Quit();
+            }
         }
 
         // ── Helpers ────────────────────────────────────────────────
