@@ -2,7 +2,7 @@
 <xml>
     <Name value="7debug" />
     <DisplayName value="7Debug - Remote Debug HTTP Server" />
-    <Version value="1.0.0" />
+    <Version value="1.1.0" />
     <Author value="Richard" />
     <Description value="Opens an HTTP debug port so other mods and tools can connect to the running game, execute commands, take screenshots, and diagnose issues." />
     <Website value="" />
