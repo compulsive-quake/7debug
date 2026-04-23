@@ -23,11 +23,45 @@ if ($status) {
     exit 1
 }
 
-# --- Check tag doesn't already exist ---
-$existingTag = git -C $ScriptDir tag -l $Tag
-if ($existingTag) {
-    Write-Host "ERROR: Tag $Tag already exists. Bump the version in ModInfo.xml first." -ForegroundColor Red
-    exit 1
+# --- Fetch remote tags so we catch tags pushed from another machine ---
+Write-Host "Fetching remote tags..." -ForegroundColor DarkGray
+git -C $ScriptDir fetch --tags --quiet 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "WARN: git fetch --tags failed (offline?); checking local tags only." -ForegroundColor DarkYellow
+}
+
+# --- Check tag doesn't already exist; offer to bump + commit if so ---
+while (git -C $ScriptDir tag -l $Tag) {
+    $parts = @($Version -split '\.')
+    $last  = $parts[-1]
+    if ($last -notmatch '^\d+$') {
+        Write-Host "ERROR: Tag $Tag already exists and last version segment '$last' is not numeric; cannot auto-bump." -ForegroundColor Red
+        exit 1
+    }
+    $parts[-1] = [string]([int]$last + 1)
+    $NextVersion = $parts -join '.'
+
+    Write-Host ""
+    Write-Host "Tag $Tag already exists." -ForegroundColor Yellow
+    $answer = Read-Host "Bump version to $NextVersion and commit? [Y/n]"
+    if ($answer -and $answer -notmatch '^(y|yes)$') {
+        Write-Host "Aborted." -ForegroundColor Red
+        exit 1
+    }
+
+    # String-replace <Version value="..."> to preserve existing XML formatting.
+    $modInfoText = [System.IO.File]::ReadAllText($ModInfoPath)
+    $updated = $modInfoText -replace '(<Version\s+value=")[^"]+(")', ('${1}' + $NextVersion + '${2}')
+    if ($updated -eq $modInfoText) { throw "Failed to update <Version value=...> in $ModInfoPath" }
+    [System.IO.File]::WriteAllText($ModInfoPath, $updated)
+
+    git -C $ScriptDir add $ModInfoPath
+    git -C $ScriptDir commit -m "Bump version to $NextVersion"
+    if ($LASTEXITCODE -ne 0) { throw "Failed to commit version bump" }
+
+    $Version = $NextVersion
+    $Tag     = "v$NextVersion"
+    Write-Host "Version bumped to $Version (committed)." -ForegroundColor Green
 }
 
 # --- Extract changelog for this version (optional) ---
