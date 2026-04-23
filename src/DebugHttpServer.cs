@@ -149,6 +149,9 @@ namespace SevenDebug
                     case "/api/quit":
                         result = HandleQuit(request);
                         break;
+                    case "/api/xuireload":
+                        result = HandleXuiReload(request);
+                        break;
                     default:
                         response.StatusCode = 404;
                         result = Json("error", "Not found. GET / for available endpoints.");
@@ -183,7 +186,8 @@ namespace SevenDebug
     ""POST /api/command"":    ""Execute a console command (body: {\""command\"": \""cmd\""})"",
     ""GET /api/saves"":       ""List saved games sorted by most recent"",
     ""POST /api/loadgame"":   ""Load a saved game (body: {\""world\"": \""name\"", \""game\"": \""name\""} or empty for most recent)"",
-    ""POST /api/quit"":       ""Save the world, wait for the save queue to drain, then quit""
+    ""POST /api/quit"":       ""Save the world, wait for the save queue to drain, then quit"",
+    ""POST /api/xuireload"":  ""Reload XUi XML (windows/xui/styles/controls) without restarting the game""
   }
 }";
         }
@@ -552,15 +556,38 @@ namespace SevenDebug
 
             Log.Out("[7debug] Graceful quit requested via API — saving world first");
 
-            var capture = _screenshotHelper.GetComponent<ScreenshotCapture>();
-            capture.QueueMainThreadAction(() => capture.StartCoroutine(SaveAndQuitCoroutine()));
+            var helper = _screenshotHelper;
+            var capture = helper.GetComponent<ScreenshotCapture>();
+            capture.QueueMainThreadAction(() => capture.StartCoroutine(SaveAndQuitCoroutine(helper)));
 
             return "{\"status\":\"saving-and-quitting\"}";
         }
 
+        private string HandleXuiReload(HttpListenerRequest request)
+        {
+            if (request.HttpMethod != "POST")
+                return Json("error", "Use POST with empty body to reload XUi.");
+
+            Log.Out("[7debug] XUi reload requested via API");
+
+            var capture = new CaptureConsoleConnection();
+            SdtdConsole.Instance.ExecuteAsync("xui reload", capture);
+
+            var sb = new StringBuilder();
+            sb.Append("{\"status\":\"reloaded\",\"output\":[");
+            for (int i = 0; i < capture.Lines.Count; i++)
+            {
+                if (i > 0) sb.Append(",");
+                sb.Append(JsonString(capture.Lines[i]));
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
         // Region files get corrupted when the process dies mid-write. Save first,
-        // let the background save thread flush chunks/regions/player data, THEN exit.
-        private static IEnumerator SaveAndQuitCoroutine()
+        // watch the console for save-IO activity, then exit once the save thread
+        // has been idle long enough that pending writes should be flushed.
+        private static IEnumerator SaveAndQuitCoroutine(GameObject helper)
         {
             if (GameManager.Instance?.World == null)
             {
@@ -574,15 +601,74 @@ namespace SevenDebug
             Log.Out("[7debug] Running saveworld...");
             SdtdConsole.Instance.ExecuteAsync("saveworld", new CaptureConsoleConnection());
 
-            // saveworld enqueues chunk/region writes on a background thread.
-            // Give it time to drain — a busy world can take several seconds.
-            const float saveDrainSeconds = 6f;
-            Log.Out($"[7debug] Waiting {saveDrainSeconds}s for save queue to drain...");
-            yield return new WaitForSeconds(saveDrainSeconds);
+            // Wait for save IO to go idle by watching the log buffer for the
+            // messages 7DTD's persisters emit while writing.
+            //   - "Saving N of chunks took Mms"  (RegionFileManager)
+            //   - "VehicleManager saved ...", "DroneManager saved ...", "TurretTracker saved ..."
+            //   - "Persistent GamePrefs saved"
+            // Done when we've seen at least one such line and none in the last idleThresholdSeconds.
+            const float idleThresholdSeconds = 2.0f;
+            const float maxWaitSeconds = 30f;
+            const float noActivityTimeoutSeconds = 5f; // if nothing to save, bail after this
+
+            ShutdownProgressOverlay overlay = null;
+            if (!isDedi && helper != null)
+            {
+                overlay = helper.AddComponent<ShutdownProgressOverlay>();
+                overlay.TotalSeconds = maxWaitSeconds;
+                overlay.Elapsed = 0f;
+            }
+
+            float startTime = Time.unscaledTime;
+            DateTime watchStart = DateTime.Now;
+            bool sawAnyActivity = false;
+            DateTime lastActivityWallclock = watchStart;
+
+            while (true)
+            {
+                float elapsed = Time.unscaledTime - startTime;
+                if (overlay != null) overlay.Elapsed = elapsed;
+
+                var entries = LogCapture.GetRecentEntries(50);
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    if (!IsSaveActivityMessage(entries[i].Message)) continue;
+                    if (!TryParseLogTime(entries[i].Time, out DateTime msgTime)) continue;
+                    if (msgTime < watchStart) continue; // older than our wait
+                    if (msgTime > lastActivityWallclock)
+                    {
+                        lastActivityWallclock = msgTime;
+                        if (!sawAnyActivity)
+                        {
+                            sawAnyActivity = true;
+                            Log.Out("[7debug] Save activity detected — waiting for it to go idle");
+                        }
+                    }
+                }
+
+                double idleSeconds = (DateTime.Now - lastActivityWallclock).TotalSeconds;
+
+                if (sawAnyActivity && idleSeconds >= idleThresholdSeconds)
+                {
+                    Log.Out($"[7debug] Save idle for {idleSeconds:F1}s — safe to quit");
+                    break;
+                }
+                if (!sawAnyActivity && elapsed >= noActivityTimeoutSeconds)
+                {
+                    Log.Out("[7debug] No save activity seen — nothing to flush, quitting");
+                    break;
+                }
+                if (elapsed >= maxWaitSeconds)
+                {
+                    Log.Warning($"[7debug] Save wait hit {maxWaitSeconds}s max — quitting anyway");
+                    break;
+                }
+
+                yield return new WaitForSecondsRealtime(0.25f);
+            }
 
             if (isDedi)
             {
-                // On a dedicated server, 'shutdown' runs the game's own save+cleanup+exit.
                 Log.Out("[7debug] Running shutdown command (dedicated server)...");
                 SdtdConsole.Instance.ExecuteAsync("shutdown", new CaptureConsoleConnection());
             }
@@ -591,6 +677,33 @@ namespace SevenDebug
                 Log.Out("[7debug] Quitting...");
                 Application.Quit();
             }
+        }
+
+        private static bool IsSaveActivityMessage(string msg)
+        {
+            if (string.IsNullOrEmpty(msg)) return false;
+            if (msg.StartsWith("Saving ", StringComparison.Ordinal) && msg.Contains(" of chunks took ")) return true;
+            if (msg.StartsWith("Persistent GamePrefs saved", StringComparison.Ordinal)) return true;
+            if (msg.IndexOf(" saved ", StringComparison.Ordinal) > 0 &&
+                (msg.StartsWith("VehicleManager", StringComparison.Ordinal) ||
+                 msg.StartsWith("DroneManager", StringComparison.Ordinal) ||
+                 msg.StartsWith("TurretTracker", StringComparison.Ordinal))) return true;
+            return false;
+        }
+
+        private static bool TryParseLogTime(string s, out DateTime result)
+        {
+            // LogCapture writes DateTime.Now.ToString("HH:mm:ss.fff") — reattach today's date.
+            if (DateTime.TryParseExact(s, "HH:mm:ss.fff",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out var t))
+            {
+                var today = DateTime.Today;
+                result = new DateTime(today.Year, today.Month, today.Day, t.Hour, t.Minute, t.Second, t.Millisecond);
+                return true;
+            }
+            result = default;
+            return false;
         }
 
         // ── Helpers ────────────────────────────────────────────────
