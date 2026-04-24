@@ -146,6 +146,9 @@ namespace SevenDebug
                     case "/api/loadgame":
                         result = HandleLoadGame(request);
                         break;
+                    case "/api/reloadgame":
+                        result = HandleReloadGame(request);
+                        break;
                     case "/api/quit":
                         result = HandleQuit(request);
                         break;
@@ -186,6 +189,7 @@ namespace SevenDebug
     ""POST /api/command"":    ""Execute a console command (body: {\""command\"": \""cmd\""})"",
     ""GET /api/saves"":       ""List saved games sorted by most recent"",
     ""POST /api/loadgame"":   ""Load a saved game (body: {\""world\"": \""name\"", \""game\"": \""name\""} or empty for most recent)"",
+    ""POST /api/reloadgame"": ""Exit current game and reload it (picks up XML changes)"",
     ""POST /api/quit"":       ""Save the world, wait for the save queue to drain, then quit"",
     ""POST /api/xuireload"":  ""Reload XUi XML (windows/xui/styles/controls) without restarting the game""
   }
@@ -542,6 +546,64 @@ namespace SevenDebug
 
             var sb = new StringBuilder();
             sb.Append("{\"status\":\"loading\",\"world\":");
+            sb.Append(JsonString(worldName));
+            sb.Append(",\"game\":");
+            sb.Append(JsonString(gameName));
+            sb.Append("}");
+            return sb.ToString();
+        }
+
+        private string HandleReloadGame(HttpListenerRequest request)
+        {
+            if (request.HttpMethod != "POST")
+                return Json("error", "Use POST with empty body to reload the current game (exits to menu, then reloads).");
+
+            if (GameManager.Instance?.World == null)
+                return Json("error", "Not in a game. Use /api/loadgame instead.");
+
+            // Capture current world/game before exiting
+            var worldName = GamePrefs.GetString(EnumGamePrefs.GameWorld);
+            var gameName = GamePrefs.GetString(EnumGamePrefs.GameName);
+
+            if (string.IsNullOrEmpty(worldName) || string.IsNullOrEmpty(gameName))
+                return Json("error", "Could not determine current world/game name.");
+
+            Log.Out($"[7debug] Reloading game: {worldName}/{gameName}");
+
+            _screenshotHelper.GetComponent<ScreenshotCapture>().QueueMainThreadAction(() =>
+            {
+                try
+                {
+                    // Exit to main menu first
+                    Log.Out("[7debug] Exiting to main menu for reload...");
+                    GameManager.Instance.Disconnect();
+
+                    // Queue the load for after we reach the main menu
+                    _screenshotHelper.GetComponent<ScreenshotCapture>().QueueDelayedAction(3f, () =>
+                    {
+                        try
+                        {
+                            Log.Out($"[7debug] Re-loading game: {worldName}/{gameName}");
+                            GamePrefs.Set(EnumGamePrefs.GameWorld, worldName);
+                            GamePrefs.Set(EnumGamePrefs.GameName, gameName);
+                            GamePrefs.Set(EnumGamePrefs.GameMode, "GameModeSurvivalSP");
+                            GameManager.Instance.StartGame(true);
+                            Log.Out("[7debug] Reload StartGame returned");
+                        }
+                        catch (Exception ex)
+                        {
+                            Log.Error($"[7debug] Reload failed: {ex}");
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error($"[7debug] ReloadGame disconnect failed: {ex}");
+                }
+            });
+
+            var sb = new StringBuilder();
+            sb.Append("{\"status\":\"reloading\",\"world\":");
             sb.Append(JsonString(worldName));
             sb.Append(",\"game\":");
             sb.Append(JsonString(gameName));

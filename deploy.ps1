@@ -62,5 +62,24 @@ New-Item -ItemType Directory -Path $ModDest -Force | Out-Null
 Copy-Item (Join-Path $ScriptDir "ModInfo.xml") $ModDest
 Copy-Item (Join-Path $ScriptDir "7debug.dll") $ModDest
 
+# Deploy Config (XML patches)
+$ConfigDir = Join-Path $ScriptDir "Config"
+if (Test-Path $ConfigDir) {
+    Copy-Item $ConfigDir $ModDest -Recurse
+}
+
+# Deploy worlds
+$WorldsDir = Join-Path $ScriptDir "Worlds"
+if (Test-Path $WorldsDir) {
+    foreach ($world in Get-ChildItem -Path $WorldsDir -Directory) {
+        $worldDest = Join-Path $GameDir "Data\Worlds\$($world.Name)"
+        Write-Host "Deploying world $($world.Name) to $worldDest..." -ForegroundColor Cyan
+        if (Test-Path $worldDest) {
+            Remove-Item $worldDest -Recurse -Force
+        }
+        Copy-Item $world.FullName $worldDest -Recurse
+    }
+}
+
 Write-Host "Deployed successfully!" -ForegroundColor Green
 Write-Host "Debug server will start on port 7860 when the game loads." -ForegroundColor Yellow

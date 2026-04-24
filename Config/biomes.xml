@@ -1,0 +1,5 @@
+<configs>
+	<!-- Remove all decorations from desert biome (for flat test worlds) -->
+	<remove xpath="/worldgeneration/biomes/biome[@name='desert']/decorations"/>
+	<remove xpath="/worldgeneration/biomes/biome[@name='desert']/subbiome/decorations"/>
+</configs>

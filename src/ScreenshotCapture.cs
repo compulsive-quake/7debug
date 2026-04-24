@@ -20,6 +20,17 @@ namespace SevenDebug
             _mainThreadActions.Enqueue(action);
         }
 
+        public void QueueDelayedAction(float delaySeconds, Action action)
+        {
+            StartCoroutine(DelayedAction(delaySeconds, action));
+        }
+
+        private IEnumerator DelayedAction(float delaySeconds, Action action)
+        {
+            yield return new WaitForSeconds(delaySeconds);
+            action();
+        }
+
         private void Update()
         {
             if (RequestQueue != null && RequestQueue.TryDequeue(out var req))
